@@ -1,15 +1,20 @@
-NAME := a.out
+NAME := ft_shield
+
+ifneq ($(filter all re $(NAME),$(MAKECMDGOALS)),)
+ifeq ($(PASSWORD),)
+$(error Usage: make PASSWORD=your_password)
+endif
+endif
 
 SRC_DIR := src
 OBJ_DIR := obj
 
-# SRCS := $(wildcard $(SRC_DIR)/*.c)
-SRCS := src/main.c
+SRCS := src/ft_shield.c src/main.c
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
 
+HASH := $(shell openssl passwd -6 -salt "ft_shield_salt" "$(PASSWORD)")
 CC := gcc
 CFLAGS := -Wall -Wextra -Werror -I$(SRC_DIR) -g
-
 RM := rm -f
 
 all: $(NAME)
@@ -21,7 +26,7 @@ $(NAME): $(OBJS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(OBJ_DIR)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -DPASSWORD='"$(PASSWORD)"' -c $< -o $@
 
 clean:
 	@echo "[ft_shield] Cleaning object files..."
